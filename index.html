@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPS Tracker with Hospital Navigation</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 380px;
+      background: white;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+      overflow-y: auto;
+      z-index: 1000;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 100%;
+        max-height: 50vh;
+      }
+      body {
+        flex-direction: column;
+      }
+    }
+
+    .sidebar-content {
+      padding: 24px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: bold;
+      color: #1f2937;
+    }
+
+    .status-section {
+      margin-bottom: 24px;
+    }
+
+    .status-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .status-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: #6b7280;
+    }
+
+    .status-badge {
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-connected {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .status-connecting {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-disconnected {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .status-error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .connect-btn {
+      width: 100%;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .connect-btn:hover:not(:disabled) {
+      background: #2563eb;
+    }
+
+    .connect-btn:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .info-card {
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    .info-card-blue {
+      background: #eff6ff;
+    }
+
+    .info-card-green {
+      background: #f0fdf4;
+    }
+
+    .info-card-orange {
+      background: #fff7ed;
+      border-left: 4px solid #f59e0b;
+    }
+
+    .impact-alert {
+      background: #fef2f2;
+      border-left: 4px solid #ef4444;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .impact-alert:hover {
+      background: #fee2e2;
+    }
+
+    .impact-alert-header {
+      font-weight: 600;
+      color: #991b1b;
+      margin-bottom: 4px;
+    }
+
+    .impact-alert-details {
+      color: #6b7280;
+    }
+
+    .info-card h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .info-card p {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 4px 0;
+    }
+
+    .info-card .route-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1f2937;
+      margin-bottom: 8px;
+    }
+
+    .route-stats {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .hospital-section h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hospital-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .hospital-card {
+      padding: 12px;
+      border-radius: 8px;
+      border: 2px solid #e5e7eb;
+      background: white;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .hospital-card:hover {
+      border-color: #3b82f6;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .hospital-card.selected {
+      border-color: #3b82f6;
+      background: #eff6ff;
+    }
+
+    .hospital-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 4px;
+    }
+
+    .hospital-name {
+      font-weight: 500;
+      color: #1f2937;
+      font-size: 14px;
+    }
+
+    .hospital-distance {
+      font-size: 12px;
+      font-weight: 600;
+      color: #3b82f6;
+    }
+
+    .hospital-address {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .map-container {
+      flex: 1;
+      position: relative;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(17, 24, 39, 0.5);
+      z-index: 2000;
+    }
+
+    .overlay-content {
+      background: white;
+      padding: 32px;
+      border-radius: 12px;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+      text-align: center;
+      max-width: 400px;
+    }
+
+    .overlay-content h2 {
+      font-size: 20px;
+      font-weight: bold;
+      color: #1f2937;
+      margin-bottom: 8px;
+    }
+
+    .overlay-content p {
+      color: #6b7280;
+    }
+
+    .icon {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+    }
+
+    .icon-lg {
+      width: 64px;
+      height: 64px;
+      color: #3b82f6;
+      margin: 0 auto 16px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .error-message {
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3), 0 2px 4px rgba(0,0,0,0.3);
+      }
+      50% {
+        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0.1), 0 2px 4px rgba(0,0,0,0.3);
+      }
+    }
+
+    .export-btn {
+      width: 100%;
+      background: #10b981;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.2s;
+    }
+
+    .export-btn:hover {
+      background: #059669;
+    }
+
+    .export-btn:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="sidebar-content">
+      <div class="header">
+        <svg class="icon" style="color: #3b82f6;" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M12 6v6l4 2"></path>
+        </svg>
+        <h1>GPS Tracker</h1>
+      </div>
+
+      <div class="status-section">
+        <div class="status-header">
+          <span class="status-label">Device Status</span>
+          <span id="statusBadge" class="status-badge status-disconnected">disconnected</span>
+        </div>
+        <button id="connectBtn" class="connect-btn">Enable GPS Tracking</button>
+        <div id="errorMessage" class="error-message hidden"></div>
+      </div>
+
+      <div id="locationCard" class="info-card info-card-blue hidden">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          Current Location
+        </h2>
+        <p id="latitude">Lat: --</p>
+        <p id="longitude">Lng: --</p>
+        <p id="accuracy">Accuracy: --</p>
+        <p id="speed">Speed: --</p>
+      </div>
+
+      <div id="routeCard" class="info-card info-card-green hidden">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l5.5 5.5M4 4l5 5"></path></svg>
+          Active Route
+        </h2>
+        <p class="route-name" id="routeHospitalName">--</p>
+        <div class="route-stats">
+          <span id="routeDistance">-- km</span>
+          <span id="routeDuration">-- min</span>
+        </div>
+      </div>
+
+      <div id="accelerometerCard" class="info-card info-card-orange hidden">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M12 2v20M2 12h20"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          Accelerometer
+        </h2>
+        <p id="accelX">X: -- g</p>
+        <p id="accelY">Y: -- g</p>
+        <p id="accelZ">Z: -- g</p>
+        <p id="accelMagnitude" style="font-weight: 600; color: #1f2937; margin-top: 4px;">Impact: -- g</p>
+      </div>
+
+      <div id="impactSection" class="hospital-section hidden">
+        <h2>
+          <svg class="icon" style="color: #f59e0b;" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 8v4M12 16h.01"></path>
+          </svg>
+          Impact Detection
+        </h2>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 12px; color: #6b7280; display: block; margin-bottom: 4px;">
+            Threshold: <span id="thresholdValue">3.0</span>g
+          </label>
+          <input type="range" id="thresholdSlider" min="1.5" max="5.0" step="0.1" value="3.0" 
+                 style="width: 100%; accent-color: #3b82f6;">
+        </div>
+        <div id="impactList" style="font-size: 12px; color: #6b7280;"></div>
+        <button id="exportBtn" class="export-btn hidden">Export Impact History</button>
+      </div>
+
+      <div id="hospitalSection" class="hospital-section hidden">
+        <h2>
+          <svg class="icon" style="color: #ef4444;" viewBox="0 0 24 24">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+          </svg>
+          Nearby Hospitals
+        </h2>
+        <div id="hospitalList" class="hospital-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="map-container">
+    <div id="map"></div>
+    <div id="overlay" class="overlay">
+      <div class="overlay-content">
+        <svg class="icon icon-lg" viewBox="0 0 24 24">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+          <circle cx="12" cy="10" r="3"></circle>
+        </svg>
+        <h2>Connect Your Device</h2>
+        <p>Allow location access to track your position in real-time using your smartphone's GPS</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <script>
+    var map;
+    var markers = [];
+    var impactMarkers = [];
+    var routeLayer = null;
+    var accuracyCircle = null;
+    var deviceLocation = null;
+    var nearbyHospitals = [];
+    var selectedHospital = null;
+    var watchId = null;
+    var impactThreshold = 3.0;
+    var impactHistory = [];
+    var lastImpactTime = 0;
+
+    function initMap() {
+      map = L.map('map').setView([14.5995, 120.9842], 13);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+    }
+
+    function showError(message) {
+      var errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.classList.remove('hidden');
+      
+      var statusBadge = document.getElementById('statusBadge');
+      statusBadge.textContent = 'error';
+      statusBadge.className = 'status-badge status-error';
+    }
+
+    function hideError() {
+      document.getElementById('errorMessage').classList.add('hidden');
+    }
+
+    document.getElementById('connectBtn').addEventListener('click', function() {
+      var statusBadge = document.getElementById('statusBadge');
+      var overlay = document.getElementById('overlay');
+      var connectBtn = document.getElementById('connectBtn');
+      
+      connectBtn.disabled = true;
+      statusBadge.textContent = 'connecting';
+      statusBadge.className = 'status-badge status-connecting';
+      hideError();
+      
+      if (!navigator.geolocation) {
+        showError('Geolocation is not supported by your browser');
+        connectBtn.disabled = false;
+        return;
+      }
+      
+      navigator.geolocation.getCurrentPosition(
+        function(position) {
+          statusBadge.textContent = 'connected';
+          statusBadge.className = 'status-badge status-connected';
+          overlay.classList.add('hidden');
+          connectBtn.style.display = 'none';
+          
+          startRealTimeTracking();
+        },
+        function(error) {
+          console.error('Error getting location:', error);
+          var errorMsg = 'Could not access location. ';
+          if (error.code === 1) {
+            errorMsg += 'Permission denied. Please allow location access.';
+          } else if (error.code === 2) {
+            errorMsg += 'Position unavailable.';
+          } else if (error.code === 3) {
+            errorMsg += 'Request timeout.';
+          }
+          showError(errorMsg);
+          connectBtn.disabled = false;
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    });
+
+    document.getElementById('thresholdSlider').addEventListener('input', function(e) {
+      impactThreshold = parseFloat(e.target.value);
+      document.getElementById('thresholdValue').textContent = impactThreshold.toFixed(1);
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', function() {
+      if (impactHistory.length === 0) {
+        alert('No impact data to export');
+        return;
+      }
+
+      var csvContent = 'Timestamp,Magnitude (g),X (g),Y (g),Z (g),Latitude,Longitude\n';
+      
+      for (var i = 0; i < impactHistory.length; i++) {
+        var impact = impactHistory[i];
+        var date = new Date(impact.timestamp);
+        csvContent += date.toISOString() + ',' +
+                      impact.magnitude.toFixed(3) + ',' +
+                      impact.x.toFixed(3) + ',' +
+                      impact.y.toFixed(3) + ',' +
+                      impact.z.toFixed(3) + ',' +
+                      impact.latitude.toFixed(6) + ',' +
+                      impact.longitude.toFixed(6) + '\n';
+      }
+
+      var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      var link = document.createElement('a');
+      var url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'impact_history_' + Date.now() + '.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    function startRealTimeTracking() {
+      watchId = navigator.geolocation.watchPosition(
+        function(position) {
+          deviceLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            speed: position.coords.speed ? position.coords.speed * 3.6 : 0,
+            heading: position.coords.heading || 0
+          };
+          
+          updateLocationDisplay();
+          updateMap();
+        },
+        function(error) {
+          console.error('Error tracking location:', error);
+          showError('Lost GPS signal. Trying to reconnect...');
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 1000,
+          timeout: 5000
+        }
+      );
+      
+      startAccelerometerTracking();
+    }
+
+    function startAccelerometerTracking() {
+      if (typeof DeviceMotionEvent === 'undefined') {
+        console.log('Accelerometer not supported');
+        return;
+      }
+
+      if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        DeviceMotionEvent.requestPermission()
+          .then(function(response) {
+            if (response === 'granted') {
+              enableAccelerometer();
+            } else {
+              console.log('Device motion permission denied');
+            }
+          })
+          .catch(function(error) {
+            console.error('Error requesting device motion permission:', error);
+          });
+      } else {
+        enableAccelerometer();
+      }
+    }
+
+    function enableAccelerometer() {
+      document.getElementById('accelerometerCard').classList.remove('hidden');
+      document.getElementById('impactSection').classList.remove('hidden');
+
+      window.addEventListener('devicemotion', function(event) {
+        if (event.acceleration) {
+          var x = event.acceleration.x || 0;
+          var y = event.acceleration.y || 0;
+          var z = event.acceleration.z || 0;
+          
+          var accelX = x / 9.81;
+          var accelY = y / 9.81;
+          var accelZ = z / 9.81;
+          
+          var magnitude = Math.sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ);
+          
+          document.getElementById('accelX').textContent = 'X: ' + accelX.toFixed(2) + ' g';
+          document.getElementById('accelY').textContent = 'Y: ' + accelY.toFixed(2) + ' g';
+          document.getElementById('accelZ').textContent = 'Z: ' + accelZ.toFixed(2) + ' g';
+          document.getElementById('accelMagnitude').textContent = 'Impact: ' + magnitude.toFixed(2) + ' g';
+          
+          if (magnitude > impactThreshold && deviceLocation) {
+            var now = Date.now();
+            if (now - lastImpactTime > 2000) {
+              handleImpactDetection(magnitude, accelX, accelY, accelZ);
+              lastImpactTime = now;
+            }
+          }
+        }
+      });
+    }
+
+    function handleImpactDetection(magnitude, x, y, z) {
+      var impact = {
+        timestamp: Date.now(),
+        magnitude: magnitude,
+        x: x,
+        y: y,
+        z: z,
+        latitude: deviceLocation.latitude,
+        longitude: deviceLocation.longitude
+      };
+      
+      impactHistory.push(impact);
+      
+      if (impactHistory.length > 0) {
+        document.getElementById('exportBtn').classList.remove('hidden');
+      }
+      
+      addImpactMarker(impact);
+      updateImpactList();
+      
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200]);
+      }
+    }
+
+    function addImpactMarker(impact) {
+      var impactIcon = L.divIcon({
+        html: '<div style="background: #ef4444; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3), 0 2px 4px rgba(0,0,0,0.3); animation: pulse 2s infinite;"></div>',
+        className: '',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+
+      var date = new Date(impact.timestamp);
+      var timeStr = date.toLocaleTimeString();
+      
+      var marker = L.marker([impact.latitude, impact.longitude], { icon: impactIcon })
+        .addTo(map)
+        .bindPopup(
+          '<strong style="color: #ef4444;">⚠️ Impact Detected</strong><br>' +
+          'Magnitude: ' + impact.magnitude.toFixed(2) + ' g<br>' +
+          'Time: ' + timeStr + '<br>' +
+          'Location: ' + impact.latitude.toFixed(6) + ', ' + impact.longitude.toFixed(6)
+        );
+      
+      impactMarkers.push(marker);
+      marker.openPopup();
+    }
+
+    function updateImpactList() {
+      var impactList = document.getElementById('impactList');
+      impactList.innerHTML = '';
+      
+      if (impactHistory.length === 0) {
+        impactList.innerHTML = '<p style="color: #9ca3af;">No impacts detected</p>';
+        return;
+      }
+      
+      var recentImpacts = impactHistory.slice(-5).reverse();
+      
+      for (var i = 0; i < recentImpacts.length; i++) {
+        var impact = recentImpacts[i];
+        var date = new Date(impact.timestamp);
+        var timeStr = date.toLocaleTimeString();
+        
+        var alertDiv = document.createElement('div');
+        alertDiv.className = 'impact-alert';
+        alertDiv.innerHTML = 
+          '<div class="impact-alert-header">⚠️ Impact: ' + impact.magnitude.toFixed(2) + ' g</div>' +
+          '<div class="impact-alert-details">' + timeStr + '</div>';
+        
+        alertDiv.onclick = (function(lat, lng) {
+          return function() {
+            map.setView([lat, lng], 16);
+          };
+        })(impact.latitude, impact.longitude);
+        
+        impactList.appendChild(alertDiv);
+      }
+    }
+
+    function updateLocationDisplay() {
+      document.getElementById('locationCard').classList.remove('hidden');
+      document.getElementById('latitude').textContent = 'Lat: ' + deviceLocation.latitude.toFixed(6);
+      document.getElementById('longitude').textContent = 'Lng: ' + deviceLocation.longitude.toFixed(6);
+      document.getElementById('accuracy').textContent = 'Accuracy: ±' + deviceLocation.accuracy.toFixed(1) + 'm';
+      document.getElementById('speed').textContent = 'Speed: ' + deviceLocation.speed.toFixed(1) + ' km/h';
+    }
+
+    function updateMap() {
+      for (var i = 0; i < markers.length; i++) {
+        map.removeLayer(markers[i]);
+      }
+      markers = [];
+
+      if (accuracyCircle) {
+        map.removeLayer(accuracyCircle);
+      }
+
+      accuracyCircle = L.circle([deviceLocation.latitude, deviceLocation.longitude], {
+        radius: deviceLocation.accuracy,
+        color: '#3b82f6',
+        fillColor: '#3b82f6',
+        fillOpacity: 0.1,
+        weight: 1
+      }).addTo(map);
+
+      var deviceIcon = L.divIcon({
+        html: '<div style="background: #3b82f6; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+        className: '',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      });
+
+      var deviceMarker = L.marker([deviceLocation.latitude, deviceLocation.longitude], { icon: deviceIcon })
+        .addTo(map)
+        .bindPopup('Your Location<br>Accuracy: ±' + deviceLocation.accuracy.toFixed(1) + 'm');
+      
+      markers.push(deviceMarker);
+      
+      if (nearbyHospitals.length === 0) {
+        map.setView([deviceLocation.latitude, deviceLocation.longitude], 13);
+        findNearbyHospitals();
+      } else {
+        updateHospitalDistances();
+      }
+    }
+
+    function updateHospitalDistances() {
+      for (var i = 0; i < nearbyHospitals.length; i++) {
+        nearbyHospitals[i].distance = calculateDistance(
+          deviceLocation.latitude,
+          deviceLocation.longitude,
+          nearbyHospitals[i].latitude,
+          nearbyHospitals[i].longitude
+        );
+      }
+      
+      nearbyHospitals.sort(function(a, b) {
+        return a.distance - b.distance;
+      });
+      
+      displayHospitals();
+    }
+
+    function findNearbyHospitals() {
+      var radius = 5000;
+      var query = '[out:json][timeout:25];(node["amenity"="hospital"](around:' + radius + ',' + deviceLocation.latitude + ',' + deviceLocation.longitude + ');way["amenity"="hospital"](around:' + radius + ',' + deviceLocation.latitude + ',' + deviceLocation.longitude + '););out center;';
+      
+      fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query))
+        .then(function(response) {
+          if (!response.ok) {
+            throw new Error('Network response was not ok');
+          }
+          return response.json();
+        })
+        .then(function(data) {
+          var hospitals = [];
+          for (var i = 0; i < data.elements.length; i++) {
+            var element = data.elements[i];
+            var lat = element.lat || (element.center ? element.center.lat : null);
+            var lon = element.lon || (element.center ? element.center.lon : null);
+            
+            if (!lat || !lon) continue;
+            
+            var distance = calculateDistance(
+              deviceLocation.latitude,
+              deviceLocation.longitude,
+              lat,
+              lon
+            );
+
+            hospitals.push({
+              id: element.id,
+              name: element.tags.name || 'Unnamed Hospital',
+              latitude: lat,
+              longitude: lon,
+              distance: distance,
+              address: element.tags['addr:full'] || element.tags['addr:street'] || 'Address not available'
+            });
+          }
+          
+          hospitals.sort(function(a, b) {
+            return a.distance - b.distance;
+          });
+          
+          nearbyHospitals = hospitals.slice(0, 5);
+          
+          if (nearbyHospitals.length === 0) {
+            useMockHospitals();
+          } else {
+            displayHospitals();
+          }
+        })
+        .catch(function(error) {
+          console.error('Error fetching hospitals:', error);
+          useMockHospitals();
+        });
+    }
+
+    function useMockHospitals() {
+      nearbyHospitals = [
+        {
+          id: 1,
+          name: 'Manila General Hospital',
+          latitude: deviceLocation.latitude + 0.01,
+          longitude: deviceLocation.longitude + 0.01,
+          distance: calculateDistance(deviceLocation.latitude, deviceLocation.longitude, deviceLocation.latitude + 0.01, deviceLocation.longitude + 0.01),
+          address: 'Taft Avenue, Manila'
+        },
+        {
+          id: 2,
+          name: 'St. Luke Medical Center',
+          latitude: deviceLocation.latitude - 0.01,
+          longitude: deviceLocation.longitude + 0.01,
+          distance: calculateDistance(deviceLocation.latitude, deviceLocation.longitude, deviceLocation.latitude - 0.01, deviceLocation.longitude + 0.01),
+          address: 'Quezon City'
+        },
+        {
+          id: 3,
+          name: 'Makati Medical Center',
+          latitude: deviceLocation.latitude + 0.005,
+          longitude: deviceLocation.longitude - 0.01,
+          distance: calculateDistance(deviceLocation.latitude, deviceLocation.longitude, deviceLocation.latitude + 0.005, deviceLocation.longitude - 0.01),
+          address: 'Makati Avenue, Makati'
+        }
+      ];
+      displayHospitals();
+    }
+
+    function displayHospitals() {
+      document.getElementById('hospitalSection').classList.remove('hidden');
+      var hospitalList = document.getElementById('hospitalList');
+      hospitalList.innerHTML = '';
+
+      for (var i = 0; i < nearbyHospitals.length; i++) {
+        var hospital = nearbyHospitals[i];
+        var card = document.createElement('div');
+        card.className = 'hospital-card';
+        if (selectedHospital && selectedHospital.id === hospital.id) {
+          card.className += ' selected';
+        }
+        card.innerHTML = '<div class="hospital-header"><span class="hospital-name">' + hospital.name + '</span><span class="hospital-distance">' + hospital.distance.toFixed(2) + ' km</span></div><p class="hospital-address">' + hospital.address + '</p>';
+        card.onclick = (function(h) {
+          return function() {
+            selectHospital(h);
+          };
+        })(hospital);
+        hospitalList.appendChild(card);
+
+        var hospitalIcon = L.divIcon({
+          html: '<div style="background: #ef4444; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+          className: '',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+
+        var marker = L.marker([hospital.latitude, hospital.longitude], { icon: hospitalIcon })
+          .addTo(map)
+          .bindPopup('<strong>' + hospital.name + '</strong><br>' + hospital.distance.toFixed(2) + ' km away');
+        
+        markers.push(marker);
+      }
+    }
+
+    function selectHospital(hospital) {
+      selectedHospital = hospital;
+
+      var cards = document.querySelectorAll('.hospital-card');
+      for (var i = 0; i < cards.length; i++) {
+        cards[i].classList.remove('selected');
+      }
+      
+      for (var i = 0; i < nearbyHospitals.length; i++) {
+        if (nearbyHospitals[i].id === hospital.id) {
+          cards[i].classList.add('selected');
+          break;
+        }
+      }
+
+      fetch('https://router.project-osrm.org/route/v1/driving/' + deviceLocation.longitude + ',' + deviceLocation.latitude + ';' + hospital.longitude + ',' + hospital.latitude + '?overview=full&geometries=geojson&steps=true')
+        .then(function(response) {
+          if (!response.ok) {
+            throw new Error('Route fetch failed');
+          }
+          return response.json();
+        })
+        .then(function(data) {
+          if (data.routes && data.routes.length > 0) {
+            var route = data.routes[0];
+            displayRoute(route, hospital);
+          }
+        })
+        .catch(function(error) {
+          console.error('Error fetching route:', error);
+          showError('Could not calculate route. Please try again.');
+        });
+    }
+
+    function displayRoute(route, hospital) {
+      if (routeLayer) {
+        map.removeLayer(routeLayer);
+      }
+
+      routeLayer = L.geoJSON(route.geometry, {
+        style: {
+          color: '#3b82f6',
+          weight: 4,
+          opacity: 0.7
+        }
+      }).addTo(map);
+
+      map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+
+      document.getElementById('routeCard').classList.remove('hidden');
+      document.getElementById('routeHospitalName').textContent = hospital.name;
+      document.getElementById('routeDistance').textContent = (route.distance / 1000).toFixed(2) + ' km';
+      document.getElementById('routeDuration').textContent = Math.round(route.duration / 60) + ' min';
+    }
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      var R = 6371;
+      var dLat = (lat2 - lat1) * Math.PI / 180;
+      var dLon = (lon2 - lon1) * Math.PI / 180;
+      var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    window.addEventListener('load', initMap);
+  </script>
+</body>
+</html>

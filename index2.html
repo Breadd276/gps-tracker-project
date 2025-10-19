@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPS Tracker with Firebase</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 380px;
+      background: white;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.1);
+      overflow-y: auto;
+      z-index: 1000;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 100%;
+        max-height: 50vh;
+      }
+      body {
+        flex-direction: column;
+      }
+    }
+
+    .sidebar-content {
+      padding: 24px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: bold;
+      color: #1f2937;
+    }
+
+    .status-section {
+      margin-bottom: 24px;
+    }
+
+    .status-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .status-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: #6b7280;
+    }
+
+    .status-badge {
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-connected {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .status-connecting {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-disconnected {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .info-card {
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+    }
+
+    .info-card-blue {
+      background: #eff6ff;
+    }
+
+    .info-card-green {
+      background: #f0fdf4;
+    }
+
+    .info-card-orange {
+      background: #fff7ed;
+      border-left: 4px solid #f59e0b;
+    }
+
+    .impact-alert {
+      background: #fef2f2;
+      border-left: 4px solid #ef4444;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .impact-alert:hover {
+      background: #fee2e2;
+    }
+
+    .impact-alert-header {
+      font-weight: 600;
+      color: #991b1b;
+      margin-bottom: 4px;
+    }
+
+    .info-card h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .info-card p {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 4px 0;
+    }
+
+    .hospital-section h2 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hospital-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .hospital-card {
+      padding: 12px;
+      border-radius: 8px;
+      border: 2px solid #e5e7eb;
+      background: white;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .hospital-card:hover {
+      border-color: #3b82f6;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .hospital-card.selected {
+      border-color: #3b82f6;
+      background: #eff6ff;
+    }
+
+    .hospital-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 4px;
+    }
+
+    .hospital-name {
+      font-weight: 500;
+      color: #1f2937;
+      font-size: 14px;
+    }
+
+    .hospital-distance {
+      font-size: 12px;
+      font-weight: 600;
+      color: #3b82f6;
+    }
+
+    .hospital-address {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .map-container {
+      flex: 1;
+      position: relative;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .icon {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+    }
+
+    .export-btn {
+      width: 100%;
+      background: #10b981;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.2s;
+    }
+
+    .export-btn:hover {
+      background: #059669;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3), 0 2px 4px rgba(0,0,0,0.3);
+      }
+      50% {
+        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0.1), 0 2px 4px rgba(0,0,0,0.3);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="sidebar-content">
+      <div class="header">
+        <svg class="icon" style="color: #3b82f6;" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M12 6v6l4 2"></path>
+        </svg>
+        <h1>GPS Tracker</h1>
+      </div>
+
+      <div class="status-section">
+        <div class="status-header">
+          <span class="status-label">Device Status</span>
+          <span id="statusBadge" class="status-badge status-connecting">connecting</span>
+        </div>
+      </div>
+
+      <div id="locationCard" class="info-card info-card-blue">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          Current Location
+        </h2>
+        <p id="latitude">Lat: --</p>
+        <p id="longitude">Lng: --</p>
+        <p id="accuracy">Accuracy: --</p>
+        <p id="speed">Speed: --</p>
+      </div>
+
+      <div id="accelerometerCard" class="info-card info-card-orange">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M12 2v20M2 12h20"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          Accelerometer
+        </h2>
+        <p id="accelX">X: -- g</p>
+        <p id="accelY">Y: -- g</p>
+        <p id="accelZ">Z: -- g</p>
+        <p id="accelMagnitude" style="font-weight: 600; color: #1f2937; margin-top: 4px;">Impact: -- g</p>
+      </div>
+
+      <div id="impactSection" class="hospital-section">
+        <h2>
+          <svg class="icon" style="color: #f59e0b;" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 8v4M12 16h.01"></path>
+          </svg>
+          Impact History
+        </h2>
+        <div id="impactList" style="font-size: 12px; color: #6b7280;"></div>
+        <button id="exportBtn" class="export-btn" style="display: none;">Export Impact History</button>
+      </div>
+
+      <div id="hospitalSection" class="hospital-section">
+        <h2>
+          <svg class="icon" style="color: #ef4444;" viewBox="0 0 24 24">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+          </svg>
+          Nearby Hospitals
+        </h2>
+        <div id="hospitalList" class="hospital-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="map-container">
+    <div id="map"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <script>
+    const FIREBASE_URL = 'https://gps-tracker-bb61c-default-rtdb.asia-southeast1.firebasedatabase.app';
+    const DEVICE_ID = 'DEVICE001';
+
+    var map;
+    var deviceMarker = null;
+    var accuracyCircle = null;
+    var impactMarkers = [];
+    var hospitalMarkers = [];
+    var nearbyHospitals = [];
+    var selectedHospital = null;
+    var routeLayer = null;
+    var impactHistory = [];
+
+    function initMap() {
+      map = L.map('map').setView([14.5995, 120.9842], 13);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      listenToFirebase();
+      listenToImpacts();
+    }
+
+    function listenToFirebase() {
+      const deviceUrl = `${FIREBASE_URL}/devices/${DEVICE_ID}.json`;
+      
+      setInterval(() => {
+        fetch(deviceUrl)
+          .then(response => response.json())
+          .then(data => {
+            if (data && data.latitude && data.longitude) {
+              updateDeviceLocation(data);
+              document.getElementById('statusBadge').textContent = 'connected';
+              document.getElementById('statusBadge').className = 'status-badge status-connected';
+            } else {
+              document.getElementById('statusBadge').textContent = 'waiting for data';
+              document.getElementById('statusBadge').className = 'status-badge status-connecting';
+            }
+          })
+          .catch(error => {
+            console.error('Error fetching device data:', error);
+            document.getElementById('statusBadge').textContent = 'disconnected';
+            document.getElementById('statusBadge').className = 'status-badge status-disconnected';
+          });
+      }, 2000);
+    }
+
+    function listenToImpacts() {
+      const impactsUrl = `${FIREBASE_URL}/impacts.json`;
+      
+      setInterval(() => {
+        fetch(impactsUrl)
+          .then(response => response.json())
+          .then(data => {
+            if (data) {
+              const impacts = Object.entries(data).map(([key, value]) => ({
+                id: key,
+                ...value
+              }));
+              
+              impacts.sort((a, b) => b.timestamp - a.timestamp);
+              impactHistory = impacts;
+              updateImpactDisplay(impacts);
+            }
+          })
+          .catch(error => console.error('Error fetching impacts:', error));
+      }, 3000);
+    }
+
+    function updateDeviceLocation(data) {
+      document.getElementById('latitude').textContent = 'Lat: ' + data.latitude.toFixed(6);
+      document.getElementById('longitude').textContent = 'Lng: ' + data.longitude.toFixed(6);
+      document.getElementById('accuracy').textContent = 'Accuracy: ±' + data.accuracy.toFixed(1) + 'm';
+      document.getElementById('speed').textContent = 'Speed: ' + data.speed.toFixed(1) + ' km/h';
+
+      if (data.accelerometer) {
+        document.getElementById('accelX').textContent = 'X: ' + data.accelerometer.x.toFixed(2) + ' g';
+        document.getElementById('accelY').textContent = 'Y: ' + data.accelerometer.y.toFixed(2) + ' g';
+        document.getElementById('accelZ').textContent = 'Z: ' + data.accelerometer.z.toFixed(2) + ' g';
+        document.getElementById('accelMagnitude').textContent = 'Impact: ' + data.accelerometer.magnitude.toFixed(2) + ' g';
+      }
+
+      updateMapMarker(data.latitude, data.longitude, data.accuracy);
+      
+      if (nearbyHospitals.length === 0) {
+        findNearbyHospitals(data.latitude, data.longitude);
+      }
+    }
+
+    function updateMapMarker(lat, lng, accuracy) {
+      if (accuracyCircle) {
+        map.removeLayer(accuracyCircle);
+      }
+
+      accuracyCircle = L.circle([lat, lng], {
+        radius: accuracy,
+        color: '#3b82f6',
+        fillColor: '#3b82f6',
+        fillOpacity: 0.1,
+        weight: 1
+      }).addTo(map);
+
+      var deviceIcon = L.divIcon({
+        html: '<div style="background: #3b82f6; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+        className: '',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      });
+
+      if (deviceMarker) {
+        deviceMarker.setLatLng([lat, lng]);
+      } else {
+        deviceMarker = L.marker([lat, lng], { icon: deviceIcon })
+          .addTo(map)
+          .bindPopup('Your Device<br>Accuracy: ±' + accuracy.toFixed(1) + 'm');
+        map.setView([lat, lng], 13);
+      }
+    }
+
+    function updateImpactDisplay(impacts) {
+      var impactList = document.getElementById('impactList');
+      impactList.innerHTML = '';
+      
+      if (impacts.length === 0) {
+        impactList.innerHTML = '<p style="color: #9ca3af;">No impacts detected</p>';
+        document.getElementById('exportBtn').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('exportBtn').style.display = 'block';
+      
+      var recentImpacts = impacts.slice(0, 5);
+      
+      for (var i = 0; i < impactMarkers.length; i++) {
+        map.removeLayer(impactMarkers[i]);
+      }
+      impactMarkers = [];
+      
+      for (var i = 0; i < recentImpacts.length; i++) {
+        var impact = recentImpacts[i];
+        var date = new Date(impact.timestamp);
+        var timeStr = date.toLocaleTimeString();
+        
+        var alertDiv = document.createElement('div');
+        alertDiv.className = 'impact-alert';
+        alertDiv.innerHTML = 
+          '<div class="impact-alert-header">⚠️ Impact: ' + impact.magnitude.toFixed(2) + ' g</div>' +
+          '<div class="impact-alert-details">' + timeStr + '</div>';
+        
+        alertDiv.onclick = (function(lat, lng) {
+          return function() {
+            map.setView([lat, lng], 16);
+          };
+        })(impact.latitude, impact.longitude);
+        
+        impactList.appendChild(alertDiv);
+
+        var impactIcon = L.divIcon({
+          html: '<div style="background: #ef4444; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3), 0 2px 4px rgba(0,0,0,0.3); animation: pulse 2s infinite;"></div>',
+          className: '',
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+
+        var marker = L.marker([impact.latitude, impact.longitude], { icon: impactIcon })
+          .addTo(map)
+          .bindPopup(
+            '<strong style="color: #ef4444;">⚠️ Impact Detected</strong><br>' +
+            'Magnitude: ' + impact.magnitude.toFixed(2) + ' g<br>' +
+            'Time: ' + timeStr + '<br>' +
+            'Device: ' + impact.deviceId
+          );
+        
+        impactMarkers.push(marker);
+      }
+    }
+
+    function findNearbyHospitals(lat, lng) {
+      var radius = 5000;
+      var query = '[out:json][timeout:25];(node["amenity"="hospital"](around:' + radius + ',' + lat + ',' + lng + ');way["amenity"="hospital"](around:' + radius + ',' + lat + ',' + lng + '););out center;';
+      
+      fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query))
+        .then(function(response) {
+          return response.json();
+        })
+        .then(function(data) {
+          var hospitals = [];
+          for (var i = 0; i < data.elements.length; i++) {
+            var element = data.elements[i];
+            var hospLat = element.lat || (element.center ? element.center.lat : null);
+            var hospLon = element.lon || (element.center ? element.center.lon : null);
+            
+            if (!hospLat || !hospLon) continue;
+            
+            var distance = calculateDistance(lat, lng, hospLat, hospLon);
+
+            hospitals.push({
+              id: element.id,
+              name: element.tags.name || 'Unnamed Hospital',
+              latitude: hospLat,
+              longitude: hospLon,
+              distance: distance,
+              address: element.tags['addr:full'] || element.tags['addr:street'] || 'Address not available'
+            });
+          }
+          
+          hospitals.sort(function(a, b) {
+            return a.distance - b.distance;
+          });
+          
+          nearbyHospitals = hospitals.slice(0, 5);
+          displayHospitals();
+        })
+        .catch(function(error) {
+          console.error('Error fetching hospitals:', error);
+        });
+    }
+
+    function displayHospitals() {
+      var hospitalList = document.getElementById('hospitalList');
+      hospitalList.innerHTML = '';
+
+      for (var i = 0; i < hospitalMarkers.length; i++) {
+        map.removeLayer(hospitalMarkers[i]);
+      }
+      hospitalMarkers = [];
+
+      for (var i = 0; i < nearbyHospitals.length; i++) {
+        var hospital = nearbyHospitals[i];
+        var card = document.createElement('div');
+        card.className = 'hospital-card';
+        if (selectedHospital && selectedHospital.id === hospital.id) {
+          card.className += ' selected';
+        }
+        card.innerHTML = '<div class="hospital-header"><span class="hospital-name">' + hospital.name + '</span><span class="hospital-distance">' + hospital.distance.toFixed(2) + ' km</span></div><p class="hospital-address">' + hospital.address + '</p>';
+        card.onclick = (function(h) {
+          return function() {
+            selectHospital(h);
+          };
+        })(hospital);
+        hospitalList.appendChild(card);
+
+        var hospitalIcon = L.divIcon({
+          html: '<div style="background: #ef4444; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+          className: '',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+
+        var marker = L.marker([hospital.latitude, hospital.longitude], { icon: hospitalIcon })
+          .addTo(map)
+          .bindPopup('<strong>' + hospital.name + '</strong><br>' + hospital.distance.toFixed(2) + ' km away');
+        
+        hospitalMarkers.push(marker);
+      }
+    }
+
+    function selectHospital(hospital) {
+      selectedHospital = hospital;
+
+      var cards = document.querySelectorAll('.hospital-card');
+      for (var i = 0; i < cards.length; i++) {
+        cards[i].classList.remove('selected');
+      }
+      
+      for (var i = 0; i < nearbyHospitals.length; i++) {
+        if (nearbyHospitals[i].id === hospital.id) {
+          cards[i].classList.add('selected');
+          break;
+        }
+      }
+
+      if (!deviceMarker) return;
+      
+      var deviceLatLng = deviceMarker.getLatLng();
+      
+      fetch('https://router.project-osrm.org/route/v1/driving/' + deviceLatLng.lng + ',' + deviceLatLng.lat + ';' + hospital.longitude + ',' + hospital.latitude + '?overview=full&geometries=geojson')
+        .then(function(response) {
+          return response.json();
+        })
+        .then(function(data) {
+          if (data.routes && data.routes.length > 0) {
+            displayRoute(data.routes[0]);
+          }
+        })
+        .catch(function(error) {
+          console.error('Error fetching route:', error);
+        });
+    }
+
+    function displayRoute(route) {
+      if (routeLayer) {
+        map.removeLayer(routeLayer);
+      }
+
+      routeLayer = L.geoJSON(route.geometry, {
+        style: {
+          color: '#3b82f6',
+          weight: 4,
+          opacity: 0.7
+        }
+      }).addTo(map);
+
+      map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+    }
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      var R = 6371;
+      var dLat = (lat2 - lat1) * Math.PI / 180;
+      var dLon = (lon2 - lon1) * Math.PI / 180;
+      var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    document.getElementById('exportBtn').addEventListener('click', function() {
+      if (impactHistory.length === 0) {
+        alert('No impact data to export');
+        return;
+      }
+
+      var csvContent = 'Timestamp,Device ID,Magnitude (g),X (g),Y (g),Z (g),Latitude,Longitude\n';
+      
+      for (var i = 0; i < impactHistory.length; i++) {
+        var impact = impactHistory[i];
+        var date = new Date(impact.timestamp);
+        var accel = impact.accelerometer || {};
+        csvContent += date.toISOString() + ',' +
+                      impact.deviceId + ',' +
+                      (impact.magnitude || 0).toFixed(3) + ',' +
+                      (accel.x || 0).toFixed(3) + ',' +
+                      (accel.y || 0).toFixed(3) + ',' +
+                      (accel.z || 0).toFixed(3) + ',' +
+                      impact.latitude.toFixed(6) + ',' +
+                      impact.longitude.toFixed(6) + '\n';
+      }
+
+      var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      var link = document.createElement('a');
+      var url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'impact_history_' + Date.now() + '.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+
+    window.addEventListener('load', initMap);
+  </script>
+</body>
+</html>
