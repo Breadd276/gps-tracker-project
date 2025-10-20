@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GPS Tracker with Hospital Navigation</title>
+  <title>GPS Tracker with Navigation</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
   <style>
     * {
@@ -117,14 +117,14 @@
       background: #f0fdf4;
     }
 
+    .info-card-purple {
+      background: #f5f3ff;
+      border-left: 4px solid #8b5cf6;
+    }
+
     .info-card-orange {
       background: #fff7ed;
       border-left: 4px solid #f59e0b;
-    }
-
-    .info-card-yellow {
-      background: #fefce8;
-      border-left: 4px solid #eab308;
     }
 
     .impact-alert {
@@ -180,6 +180,66 @@
       gap: 16px;
       font-size: 12px;
       color: #6b7280;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+
+    .btn-success {
+      background: #10b981;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #059669;
+    }
+
+    .btn:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .directions-step {
+      padding: 10px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 13px;
+    }
+
+    .directions-step:last-child {
+      border-bottom: none;
+    }
+
+    .step-instruction {
+      color: #1f2937;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .step-distance {
+      color: #6b7280;
+      font-size: 12px;
     }
 
     .hospital-section h2 {
@@ -273,18 +333,6 @@
       margin-top: 8px;
     }
 
-    .debug-info {
-      background: #f3f4f6;
-      color: #374151;
-      padding: 8px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-family: monospace;
-      margin-top: 8px;
-      max-height: 150px;
-      overflow-y: auto;
-    }
-
     @keyframes pulse {
       0%, 100% {
         box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3), 0 2px 4px rgba(0,0,0,0.3);
@@ -302,27 +350,13 @@
       animation: spin 1s linear infinite;
     }
 
-    .export-btn {
-      width: 100%;
-      background: #10b981;
-      color: white;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      margin-top: 8px;
-      transition: background 0.2s;
-    }
-
-    .export-btn:hover {
-      background: #059669;
-    }
-
-    .export-btn:disabled {
-      background: #9ca3af;
-      cursor: not-allowed;
+    @keyframes locationPulse {
+      0%, 100% {
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);
+      }
+      50% {
+        box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.1);
+      }
     }
   </style>
 </head>
@@ -352,19 +386,45 @@
           </span>
         </div>
         <div id="errorMessage" class="error-message hidden"></div>
-        <div id="debugInfo" class="debug-info hidden"></div>
+      </div>
+
+      <div id="myLocationCard" class="info-card info-card-purple">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+          </svg>
+          My Location
+        </h2>
+        <p id="myLatitude">Lat: --</p>
+        <p id="myLongitude">Lng: --</p>
+        <p id="myAccuracy">Accuracy: --</p>
+        <button id="getLocationBtn" class="btn btn-primary">
+          <svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M12 8v8M8 12h8"></path>
+          </svg>
+          Get My Location
+        </button>
       </div>
 
       <div id="locationCard" class="info-card info-card-blue">
         <h2>
           <svg class="icon" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-          Current Location
+          Device Location
         </h2>
         <p id="latitude">Lat: --</p>
         <p id="longitude">Lng: --</p>
         <p id="accuracy">Accuracy: --</p>
         <p id="speed">Speed: --</p>
+        <p id="distanceToDevice" style="font-weight: 600; color: #1f2937; margin-top: 4px;">Distance: --</p>
         <p id="lastUpdate">Last update: --</p>
+        <button id="navigateToDeviceBtn" class="btn btn-primary hidden">
+          <svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24">
+            <path d="M16 3h5v5M4 20L21 3"></path>
+          </svg>
+          Navigate to Device
+        </button>
       </div>
 
       <div id="accelerometerCard" class="info-card info-card-orange">
@@ -386,10 +446,15 @@
           <svg class="icon" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l5.5 5.5M4 4l5 5"></path></svg>
           Active Route
         </h2>
-        <p class="route-name" id="routeHospitalName">--</p>
+        <p class="route-name" id="routeDestinationName">--</p>
         <div class="route-stats">
           <span id="routeDistance">-- km</span>
           <span id="routeDuration">-- min</span>
+        </div>
+        <button id="clearRouteBtn" class="btn btn-success" style="background: #ef4444; margin-top: 12px;">
+          Clear Route
+        </button>
+        <div id="directionsContainer" style="max-height: 300px; overflow-y: auto; margin-top: 12px; border-top: 1px solid #e5e7eb; padding-top: 8px;">
         </div>
       </div>
 
@@ -402,7 +467,7 @@
           Impact Detection
         </h2>
         <div id="impactList" style="font-size: 12px; color: #6b7280;">No impacts detected</div>
-        <button id="exportBtn" class="export-btn hidden">Export Impact History</button>
+        <button id="exportBtn" class="btn btn-success hidden">Export Impact History</button>
       </div>
 
       <div id="hospitalSection" class="hospital-section hidden">
@@ -438,11 +503,14 @@
     let impactMarkers = [];
     let routeLayer = null;
     let accuracyCircle = null;
+    let myAccuracyCircle = null;
     let deviceLocation = null;
+    let myLocation = null;
+    let myLocationMarker = null;
     let nearbyHospitals = [];
     let selectedHospital = null;
     let impactHistory = [];
-    let debugMode = true; // Enable debug logging
+    let watchId = null;
 
     function initMap() {
       map = L.map('map').setView([14.5995, 120.9842], 13);
@@ -467,14 +535,6 @@
       document.getElementById('errorMessage').classList.add('hidden');
     }
 
-    function addDebugLog(message) {
-      if (!debugMode) return;
-      const debugDiv = document.getElementById('debugInfo');
-      debugDiv.classList.remove('hidden');
-      const timestamp = new Date().toLocaleTimeString();
-      debugDiv.innerHTML = `[${timestamp}] ${message}<br>` + debugDiv.innerHTML;
-    }
-
     function updateGPSStatus(status) {
       const gpsStatusBadge = document.getElementById('gpsStatusBadge');
       
@@ -490,15 +550,187 @@
       }
     }
 
+    function getMyLocation() {
+      if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser');
+        return;
+      }
+
+      const btn = document.getElementById('getLocationBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="icon spinner" style="width: 16px; height: 16px;" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg> Getting Location...';
+
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          myLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          };
+
+          document.getElementById('myLatitude').textContent = 'Lat: ' + myLocation.latitude.toFixed(6);
+          document.getElementById('myLongitude').textContent = 'Lng: ' + myLocation.longitude.toFixed(6);
+          document.getElementById('myAccuracy').textContent = 'Accuracy: ±' + myLocation.accuracy.toFixed(1) + 'm';
+
+          btn.innerHTML = '✓ Tracking My Location';
+          btn.style.background = '#10b981';
+
+          updateMyLocationOnMap();
+          
+          if (deviceLocation) {
+            updateDistanceToDevice();
+            document.getElementById('navigateToDeviceBtn').classList.remove('hidden');
+          }
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          alert('Could not get your location. Please enable location services.');
+          btn.disabled = false;
+          btn.innerHTML = '<svg class="icon" style="width: 16px; height: 16px;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v8M8 12h8"></path></svg> Get My Location';
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 10000
+        }
+      );
+    }
+
+    function updateMyLocationOnMap() {
+      if (myLocationMarker) {
+        map.removeLayer(myLocationMarker);
+      }
+      if (myAccuracyCircle) {
+        map.removeLayer(myAccuracyCircle);
+      }
+
+      myAccuracyCircle = L.circle([myLocation.latitude, myLocation.longitude], {
+        radius: myLocation.accuracy,
+        color: '#8b5cf6',
+        fillColor: '#8b5cf6',
+        fillOpacity: 0.1,
+        weight: 1
+      }).addTo(map);
+
+      const myIcon = L.divIcon({
+        html: '<div style="background: #8b5cf6; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.3), 0 2px 4px rgba(0,0,0,0.3); animation: locationPulse 2s infinite;"></div>',
+        className: '',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+
+      myLocationMarker = L.marker([myLocation.latitude, myLocation.longitude], { icon: myIcon })
+        .addTo(map)
+        .bindPopup('📍 You are here<br>Accuracy: ±' + myLocation.accuracy.toFixed(1) + 'm');
+    }
+
+    function updateDistanceToDevice() {
+      if (!myLocation || !deviceLocation) return;
+
+      const distance = calculateDistance(
+        myLocation.latitude,
+        myLocation.longitude,
+        deviceLocation.latitude,
+        deviceLocation.longitude
+      );
+
+      document.getElementById('distanceToDevice').textContent = 'Distance: ' + distance.toFixed(2) + ' km away';
+    }
+
+    function navigateToDevice() {
+      if (!myLocation || !deviceLocation) {
+        alert('Need both your location and device location to navigate');
+        return;
+      }
+
+      getDirections(myLocation, deviceLocation, 'Device Location');
+    }
+
+    function getDirections(from, to, destinationName) {
+      fetch(`https://router.project-osrm.org/route/v1/driving/${from.longitude},${from.latitude};${to.longitude},${to.latitude}?overview=full&geometries=geojson&steps=true`)
+        .then(response => {
+          if (!response.ok) throw new Error('Route error');
+          return response.json();
+        })
+        .then(data => {
+          if (data.routes && data.routes.length > 0) {
+            displayRoute(data.routes[0], destinationName);
+          }
+        })
+        .catch(error => {
+          console.error('Route error:', error);
+          alert('Could not get directions');
+        });
+    }
+
+    function displayRoute(route, destinationName) {
+      if (routeLayer) map.removeLayer(routeLayer);
+
+      routeLayer = L.geoJSON(route.geometry, {
+        style: { color: '#3b82f6', weight: 4, opacity: 0.7 }
+      }).addTo(map);
+
+      map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+
+      document.getElementById('routeCard').classList.remove('hidden');
+      document.getElementById('routeDestinationName').textContent = destinationName;
+      document.getElementById('routeDistance').textContent = (route.distance / 1000).toFixed(2) + ' km';
+      document.getElementById('routeDuration').textContent = Math.round(route.duration / 60) + ' min';
+
+      // Display turn-by-turn directions
+      const directionsContainer = document.getElementById('directionsContainer');
+      directionsContainer.innerHTML = '';
+
+      if (route.legs && route.legs[0].steps) {
+        route.legs[0].steps.forEach((step, index) => {
+          const stepDiv = document.createElement('div');
+          stepDiv.className = 'directions-step';
+          
+          const instruction = step.maneuver.instruction || getManeuverText(step.maneuver.type);
+          
+          stepDiv.innerHTML = `
+            <div class="step-instruction">${index + 1}. ${instruction}</div>
+            <div class="step-distance">${(step.distance / 1000).toFixed(2)} km</div>
+          `;
+          
+          directionsContainer.appendChild(stepDiv);
+        });
+      }
+    }
+
+    function getManeuverText(type) {
+      const maneuvers = {
+        'turn': 'Turn',
+        'new name': 'Continue',
+        'depart': 'Head out',
+        'arrive': 'Arrive at destination',
+        'merge': 'Merge',
+        'on ramp': 'Take the ramp',
+        'off ramp': 'Take the exit',
+        'fork': 'At the fork',
+        'end of road': 'At the end of the road',
+        'continue': 'Continue',
+        'roundabout': 'Enter the roundabout',
+        'rotary': 'Enter the rotary'
+      };
+      
+      return maneuvers[type] || 'Continue';
+    }
+
+    function clearRoute() {
+      if (routeLayer) {
+        map.removeLayer(routeLayer);
+        routeLayer = null;
+      }
+      document.getElementById('routeCard').classList.add('hidden');
+    }
+
     function listenToFirebase() {
       const deviceRef = ref(database, 'devices/DEVICE001');
-      
-      addDebugLog('Connecting to Firebase...');
       
       onValue(deviceRef, (snapshot) => {
         const data = snapshot.val();
         console.log('Firebase data received:', data);
-        addDebugLog('Data received: ' + JSON.stringify(data));
         
         if (data) {
           hideError();
@@ -506,11 +738,9 @@
           statusBadge.textContent = 'connected';
           statusBadge.className = 'status-badge status-connected';
 
-          // Check GPS status
           const gpsStatus = data.gpsStatus || 'unknown';
           updateGPSStatus(gpsStatus);
 
-          // Update accelerometer data
           if (data.accelerometer) {
             document.getElementById('accelX').textContent = 'X: ' + data.accelerometer.x.toFixed(2) + ' g';
             document.getElementById('accelY').textContent = 'Y: ' + data.accelerometer.y.toFixed(2) + ' g';
@@ -518,9 +748,7 @@
             document.getElementById('accelMagnitude').textContent = 'Impact: ' + data.accelerometer.magnitude.toFixed(2) + ' g';
           }
 
-          // Only process location if we have valid coordinates
           if (data.latitude !== undefined && data.longitude !== undefined) {
-            // Check if GPS has a real fix (not 0,0)
             if (data.latitude !== 0 && data.longitude !== 0) {
               deviceLocation = {
                 latitude: data.latitude,
@@ -529,34 +757,33 @@
                 speed: data.speed || 0
               };
 
-              addDebugLog(`GPS Fix: ${data.latitude}, ${data.longitude}`);
               updateLocationDisplay();
               updateMap();
+              
+              if (myLocation) {
+                updateDistanceToDevice();
+                document.getElementById('navigateToDeviceBtn').classList.remove('hidden');
+              }
               
               if (nearbyHospitals.length === 0) {
                 findNearbyHospitals();
               }
             } else {
-              // GPS is searching (0,0 coordinates)
               document.getElementById('latitude').textContent = 'Lat: Waiting for GPS...';
               document.getElementById('longitude').textContent = 'Lng: Waiting for GPS...';
               document.getElementById('accuracy').textContent = 'GPS acquiring satellite fix...';
-              addDebugLog('GPS still searching for satellites');
             }
           }
           
-          // Update last update time
           const now = new Date();
           document.getElementById('lastUpdate').textContent = 'Last update: ' + now.toLocaleTimeString();
           
         } else {
           showError('No data from device. Check ESP32 Serial Monitor for errors.');
-          addDebugLog('No data in Firebase path');
         }
       }, (error) => {
         console.error('Firebase error:', error);
         showError('Firebase connection error: ' + error.message);
-        addDebugLog('Firebase error: ' + error.message);
       });
 
       const impactsRef = query(ref(database, 'impacts'), limitToLast(10));
@@ -619,10 +846,19 @@
 
       const deviceMarker = L.marker([deviceLocation.latitude, deviceLocation.longitude], { icon: deviceIcon })
         .addTo(map)
-        .bindPopup('Your Device<br>Accuracy: ±' + deviceLocation.accuracy.toFixed(1) + 'm');
+        .bindPopup('📱 Your Device<br>Accuracy: ±' + deviceLocation.accuracy.toFixed(1) + 'm');
       
       markers.push(deviceMarker);
-      map.setView([deviceLocation.latitude, deviceLocation.longitude], 13);
+      
+      if (myLocation) {
+        const bounds = L.latLngBounds([
+          [myLocation.latitude, myLocation.longitude],
+          [deviceLocation.latitude, deviceLocation.longitude]
+        ]);
+        map.fitBounds(bounds, { padding: [50, 50] });
+      } else {
+        map.setView([deviceLocation.latitude, deviceLocation.longitude], 13);
+      }
     }
 
     function updateImpactMarkers() {
@@ -647,14 +883,26 @@
       const date = new Date(impact.timestamp);
       const timeStr = date.toLocaleString();
       
+      const popupContent = document.createElement('div');
+      popupContent.innerHTML = 
+        '<strong style="color: #ef4444;">⚠️ Impact Detected</strong><br>' +
+        'Magnitude: ' + impact.magnitude.toFixed(2) + ' g<br>' +
+        'Time: ' + timeStr + '<br>' +
+        'Location: ' + impact.latitude.toFixed(6) + ', ' + impact.longitude.toFixed(6);
+      
+      if (myLocation) {
+        const navBtn = document.createElement('button');
+        navBtn.textContent = '🧭 Navigate Here';
+        navBtn.style.cssText = 'margin-top: 8px; padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;';
+        navBtn.onclick = () => {
+          getDirections(myLocation, { latitude: impact.latitude, longitude: impact.longitude }, 'Impact Location');
+        };
+        popupContent.appendChild(navBtn);
+      }
+      
       const marker = L.marker([impact.latitude, impact.longitude], { icon: impactIcon })
         .addTo(map)
-        .bindPopup(
-          '<strong style="color: #ef4444;">⚠️ Impact Detected</strong><br>' +
-          'Magnitude: ' + impact.magnitude.toFixed(2) + ' g<br>' +
-          'Time: ' + timeStr + '<br>' +
-          'Location: ' + impact.latitude.toFixed(6) + ', ' + impact.longitude.toFixed(6)
-        );
+        .bindPopup(popupContent);
       
       impactMarkers.push(marker);
     }
@@ -683,12 +931,24 @@
         alertDiv.onclick = () => {
           if (impact.latitude !== 0 && impact.longitude !== 0) {
             map.setView([impact.latitude, impact.longitude], 16);
+            
+            if (myLocation) {
+              if (confirm('Navigate to this impact location?')) {
+                getDirections(myLocation, { latitude: impact.latitude, longitude: impact.longitude }, 'Impact Location');
+              }
+            }
           }
         };
         
         impactList.appendChild(alertDiv);
       });
     }
+
+    document.getElementById('getLocationBtn').addEventListener('click', getMyLocation);
+    
+    document.getElementById('navigateToDeviceBtn').addEventListener('click', navigateToDevice);
+    
+    document.getElementById('clearRouteBtn').addEventListener('click', clearRoute);
 
     document.getElementById('exportBtn').addEventListener('click', () => {
       if (impactHistory.length === 0) {
@@ -804,34 +1064,11 @@
         cards[index].classList.add('selected');
       }
 
-      fetch('https://router.project-osrm.org/route/v1/driving/' + deviceLocation.longitude + ',' + deviceLocation.latitude + ';' + hospital.longitude + ',' + hospital.latitude + '?overview=full&geometries=geojson')
-        .then(response => {
-          if (!response.ok) throw new Error('Route error');
-          return response.json();
-        })
-        .then(data => {
-          if (data.routes && data.routes.length > 0) {
-            displayRoute(data.routes[0], hospital);
-          }
-        })
-        .catch(error => {
-          console.error('Route error:', error);
-        });
-    }
-
-    function displayRoute(route, hospital) {
-      if (routeLayer) map.removeLayer(routeLayer);
-
-      routeLayer = L.geoJSON(route.geometry, {
-        style: { color: '#3b82f6', weight: 4, opacity: 0.7 }
-      }).addTo(map);
-
-      map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
-
-      document.getElementById('routeCard').classList.remove('hidden');
-      document.getElementById('routeHospitalName').textContent = hospital.name;
-      document.getElementById('routeDistance').textContent = (route.distance / 1000).toFixed(2) + ' km';
-      document.getElementById('routeDuration').textContent = Math.round(route.duration / 60) + ' min';
+      if (myLocation) {
+        getDirections(myLocation, hospital, hospital.name);
+      } else if (deviceLocation) {
+        getDirections(deviceLocation, hospital, hospital.name);
+      }
     }
 
     function calculateDistance(lat1, lon1, lat2, lon2) {
