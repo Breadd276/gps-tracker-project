@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GPS Tracker with Firebase</title>
+  <title>GPS Tracker with Hospital Navigation</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
   <style>
     * {
@@ -93,6 +93,11 @@
       color: #374151;
     }
 
+    .status-error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
     .info-card {
       padding: 16px;
       border-radius: 8px;
@@ -133,6 +138,10 @@
       margin-bottom: 4px;
     }
 
+    .impact-alert-details {
+      color: #6b7280;
+    }
+
     .info-card h2 {
       font-size: 14px;
       font-weight: 600;
@@ -147,6 +156,20 @@
       font-size: 12px;
       color: #6b7280;
       margin: 4px 0;
+    }
+
+    .info-card .route-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1f2937;
+      margin-bottom: 8px;
+    }
+
+    .route-stats {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: #6b7280;
     }
 
     .hospital-section h2 {
@@ -227,6 +250,28 @@
       stroke-width: 2;
     }
 
+    .hidden {
+      display: none;
+    }
+
+    .error-message {
+      background: #fee2e2;
+      color: #991b1b;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3), 0 2px 4px rgba(0,0,0,0.3);
+      }
+      50% {
+        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0.1), 0 2px 4px rgba(0,0,0,0.3);
+      }
+    }
+
     .export-btn {
       width: 100%;
       background: #10b981;
@@ -245,13 +290,9 @@
       background: #059669;
     }
 
-    @keyframes pulse {
-      0%, 100% {
-        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3), 0 2px 4px rgba(0,0,0,0.3);
-      }
-      50% {
-        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0.1), 0 2px 4px rgba(0,0,0,0.3);
-      }
+    .export-btn:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
     }
   </style>
 </head>
@@ -269,8 +310,9 @@
       <div class="status-section">
         <div class="status-header">
           <span class="status-label">Device Status</span>
-          <span id="statusBadge" class="status-badge status-connecting">connecting</span>
+          <span id="statusBadge" class="status-badge status-connecting">connecting...</span>
         </div>
+        <div id="errorMessage" class="error-message hidden"></div>
       </div>
 
       <div id="locationCard" class="info-card info-card-blue">
@@ -282,6 +324,7 @@
         <p id="longitude">Lng: --</p>
         <p id="accuracy">Accuracy: --</p>
         <p id="speed">Speed: --</p>
+        <p id="lastUpdate">Last update: --</p>
       </div>
 
       <div id="accelerometerCard" class="info-card info-card-orange">
@@ -298,19 +341,31 @@
         <p id="accelMagnitude" style="font-weight: 600; color: #1f2937; margin-top: 4px;">Impact: -- g</p>
       </div>
 
+      <div id="routeCard" class="info-card info-card-green hidden">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l5.5 5.5M4 4l5 5"></path></svg>
+          Active Route
+        </h2>
+        <p class="route-name" id="routeHospitalName">--</p>
+        <div class="route-stats">
+          <span id="routeDistance">-- km</span>
+          <span id="routeDuration">-- min</span>
+        </div>
+      </div>
+
       <div id="impactSection" class="hospital-section">
         <h2>
           <svg class="icon" style="color: #f59e0b;" viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="10"></circle>
             <path d="M12 8v4M12 16h.01"></path>
           </svg>
-          Impact History
+          Impact Detection
         </h2>
-        <div id="impactList" style="font-size: 12px; color: #6b7280;"></div>
-        <button id="exportBtn" class="export-btn" style="display: none;">Export Impact History</button>
+        <div id="impactList" style="font-size: 12px; color: #6b7280;">No impacts detected</div>
+        <button id="exportBtn" class="export-btn hidden">Export Impact History</button>
       </div>
 
-      <div id="hospitalSection" class="hospital-section">
+      <div id="hospitalSection" class="hospital-section hidden">
         <h2>
           <svg class="icon" style="color: #ef4444;" viewBox="0 0 24 24">
             <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
@@ -327,19 +382,26 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-  <script>
-    const FIREBASE_URL = 'https://gps-tracker-bb61c-default-rtdb.asia-southeast1.firebasedatabase.app';
-    const DEVICE_ID = 'DEVICE001';
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+    import { getDatabase, ref, onValue, query, limitToLast } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
 
-    var map;
-    var deviceMarker = null;
-    var accuracyCircle = null;
-    var impactMarkers = [];
-    var hospitalMarkers = [];
-    var nearbyHospitals = [];
-    var selectedHospital = null;
-    var routeLayer = null;
-    var impactHistory = [];
+    const firebaseConfig = {
+      databaseURL: "https://gps-tracker-bb61c-default-rtdb.asia-southeast1.firebasedatabase.app"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    let map;
+    let markers = [];
+    let impactMarkers = [];
+    let routeLayer = null;
+    let accuracyCircle = null;
+    let deviceLocation = null;
+    let nearbyHospitals = [];
+    let selectedHospital = null;
+    let impactHistory = [];
 
     function initMap() {
       map = L.map('map').setView([14.5995, 120.9842], 13);
@@ -348,330 +410,215 @@
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19
       }).addTo(map);
+    }
 
-      listenToFirebase();
-      listenToImpacts();
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.classList.remove('hidden');
+      
+      const statusBadge = document.getElementById('statusBadge');
+      statusBadge.textContent = 'error';
+      statusBadge.className = 'status-badge status-error';
+    }
+
+    function hideError() {
+      document.getElementById('errorMessage').classList.add('hidden');
     }
 
     function listenToFirebase() {
-      const deviceUrl = `${FIREBASE_URL}/devices/${DEVICE_ID}.json`;
+      const deviceRef = ref(database, 'devices/DEVICE001');
       
-      setInterval(() => {
-        fetch(deviceUrl)
-          .then(response => response.json())
-          .then(data => {
-            if (data && data.latitude && data.longitude) {
-              updateDeviceLocation(data);
-              document.getElementById('statusBadge').textContent = 'connected';
-              document.getElementById('statusBadge').className = 'status-badge status-connected';
-            } else {
-              document.getElementById('statusBadge').textContent = 'waiting for data';
-              document.getElementById('statusBadge').className = 'status-badge status-connecting';
-            }
-          })
-          .catch(error => {
-            console.error('Error fetching device data:', error);
-            document.getElementById('statusBadge').textContent = 'disconnected';
-            document.getElementById('statusBadge').className = 'status-badge status-disconnected';
-          });
-      }, 2000);
+      onValue(deviceRef, (snapshot) => {
+        const data = snapshot.val();
+        console.log('Firebase data received:', data);
+        
+        if (data && data.latitude && data.longitude) {
+          hideError();
+          const statusBadge = document.getElementById('statusBadge');
+          statusBadge.textContent = 'connected';
+          statusBadge.className = 'status-badge status-connected';
+
+          deviceLocation = {
+            latitude: data.latitude,
+            longitude: data.longitude,
+            accuracy: data.accuracy || 15,
+            speed: data.speed || 0
+          };
+
+          if (data.accelerometer) {
+            document.getElementById('accelX').textContent = 'X: ' + data.accelerometer.x.toFixed(2) + ' g';
+            document.getElementById('accelY').textContent = 'Y: ' + data.accelerometer.y.toFixed(2) + ' g';
+            document.getElementById('accelZ').textContent = 'Z: ' + data.accelerometer.z.toFixed(2) + ' g';
+            document.getElementById('accelMagnitude').textContent = 'Impact: ' + data.accelerometer.magnitude.toFixed(2) + ' g';
+          }
+
+          updateLocationDisplay();
+          updateMap();
+          
+          if (nearbyHospitals.length === 0) {
+            findNearbyHospitals();
+          }
+        } else {
+          showError('Waiting for device data... Make sure ESP32 is sending data.');
+        }
+      }, (error) => {
+        console.error('Firebase error:', error);
+        showError('Firebase connection error: ' + error.message);
+      });
+
+      const impactsRef = query(ref(database, 'impacts'), limitToLast(10));
+      onValue(impactsRef, (snapshot) => {
+        impactHistory = [];
+        snapshot.forEach((childSnapshot) => {
+          const impact = childSnapshot.val();
+          if (impact && impact.latitude && impact.longitude) {
+            impactHistory.push({
+              timestamp: impact.timestamp || Date.now(),
+              magnitude: impact.magnitude || 0,
+              x: impact.accelerometer ? impact.accelerometer.x : 0,
+              y: impact.accelerometer ? impact.accelerometer.y : 0,
+              z: impact.accelerometer ? impact.accelerometer.z : 0,
+              latitude: impact.latitude,
+              longitude: impact.longitude
+            });
+          }
+        });
+        
+        impactHistory.sort((a, b) => b.timestamp - a.timestamp);
+        updateImpactList();
+        updateImpactMarkers();
+        
+        if (impactHistory.length > 0) {
+          document.getElementById('exportBtn').classList.remove('hidden');
+        }
+      });
     }
 
-    function listenToImpacts() {
-      const impactsUrl = `${FIREBASE_URL}/impacts.json`;
+    function updateLocationDisplay() {
+      document.getElementById('latitude').textContent = 'Lat: ' + deviceLocation.latitude.toFixed(6);
+      document.getElementById('longitude').textContent = 'Lng: ' + deviceLocation.longitude.toFixed(6);
+      document.getElementById('accuracy').textContent = 'Accuracy: ±' + deviceLocation.accuracy.toFixed(1) + 'm';
+      document.getElementById('speed').textContent = 'Speed: ' + deviceLocation.speed.toFixed(1) + ' km/h';
       
-      setInterval(() => {
-        fetch(impactsUrl)
-          .then(response => response.json())
-          .then(data => {
-            if (data) {
-              const impacts = Object.entries(data).map(([key, value]) => ({
-                id: key,
-                ...value
-              }));
-              
-              impacts.sort((a, b) => b.timestamp - a.timestamp);
-              impactHistory = impacts;
-              updateImpactDisplay(impacts);
-            }
-          })
-          .catch(error => console.error('Error fetching impacts:', error));
-      }, 3000);
+      const now = new Date();
+      document.getElementById('lastUpdate').textContent = 'Last update: ' + now.toLocaleTimeString();
     }
 
-    function updateDeviceLocation(data) {
-      document.getElementById('latitude').textContent = 'Lat: ' + data.latitude.toFixed(6);
-      document.getElementById('longitude').textContent = 'Lng: ' + data.longitude.toFixed(6);
-      document.getElementById('accuracy').textContent = 'Accuracy: ±' + data.accuracy.toFixed(1) + 'm';
-      document.getElementById('speed').textContent = 'Speed: ' + data.speed.toFixed(1) + ' km/h';
+    function updateMap() {
+      markers.forEach(marker => map.removeLayer(marker));
+      markers = [];
 
-      if (data.accelerometer) {
-        document.getElementById('accelX').textContent = 'X: ' + data.accelerometer.x.toFixed(2) + ' g';
-        document.getElementById('accelY').textContent = 'Y: ' + data.accelerometer.y.toFixed(2) + ' g';
-        document.getElementById('accelZ').textContent = 'Z: ' + data.accelerometer.z.toFixed(2) + ' g';
-        document.getElementById('accelMagnitude').textContent = 'Impact: ' + data.accelerometer.magnitude.toFixed(2) + ' g';
-      }
-
-      updateMapMarker(data.latitude, data.longitude, data.accuracy);
-      
-      if (nearbyHospitals.length === 0) {
-        findNearbyHospitals(data.latitude, data.longitude);
-      }
-    }
-
-    function updateMapMarker(lat, lng, accuracy) {
       if (accuracyCircle) {
         map.removeLayer(accuracyCircle);
       }
 
-      accuracyCircle = L.circle([lat, lng], {
-        radius: accuracy,
+      accuracyCircle = L.circle([deviceLocation.latitude, deviceLocation.longitude], {
+        radius: deviceLocation.accuracy,
         color: '#3b82f6',
         fillColor: '#3b82f6',
         fillOpacity: 0.1,
         weight: 1
       }).addTo(map);
 
-      var deviceIcon = L.divIcon({
+      const deviceIcon = L.divIcon({
         html: '<div style="background: #3b82f6; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
         className: '',
         iconSize: [20, 20],
         iconAnchor: [10, 10]
       });
 
-      if (deviceMarker) {
-        deviceMarker.setLatLng([lat, lng]);
-      } else {
-        deviceMarker = L.marker([lat, lng], { icon: deviceIcon })
-          .addTo(map)
-          .bindPopup('Your Device<br>Accuracy: ±' + accuracy.toFixed(1) + 'm');
-        map.setView([lat, lng], 13);
-      }
+      const deviceMarker = L.marker([deviceLocation.latitude, deviceLocation.longitude], { icon: deviceIcon })
+        .addTo(map)
+        .bindPopup('Your Device<br>Accuracy: ±' + deviceLocation.accuracy.toFixed(1) + 'm');
+      
+      markers.push(deviceMarker);
+      map.setView([deviceLocation.latitude, deviceLocation.longitude], 13);
     }
 
-    function updateImpactDisplay(impacts) {
-      var impactList = document.getElementById('impactList');
+    function updateImpactMarkers() {
+      impactMarkers.forEach(marker => map.removeLayer(marker));
+      impactMarkers = [];
+
+      impactHistory.forEach(impact => {
+        addImpactMarker(impact);
+      });
+    }
+
+    function addImpactMarker(impact) {
+      const impactIcon = L.divIcon({
+        html: '<div style="background: #ef4444; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3), 0 2px 4px rgba(0,0,0,0.3); animation: pulse 2s infinite;"></div>',
+        className: '',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+
+      const date = new Date(impact.timestamp);
+      const timeStr = date.toLocaleString();
+      
+      const marker = L.marker([impact.latitude, impact.longitude], { icon: impactIcon })
+        .addTo(map)
+        .bindPopup(
+          '<strong style="color: #ef4444;">⚠️ Impact Detected</strong><br>' +
+          'Magnitude: ' + impact.magnitude.toFixed(2) + ' g<br>' +
+          'Time: ' + timeStr + '<br>' +
+          'Location: ' + impact.latitude.toFixed(6) + ', ' + impact.longitude.toFixed(6)
+        );
+      
+      impactMarkers.push(marker);
+    }
+
+    function updateImpactList() {
+      const impactList = document.getElementById('impactList');
       impactList.innerHTML = '';
       
-      if (impacts.length === 0) {
+      if (impactHistory.length === 0) {
         impactList.innerHTML = '<p style="color: #9ca3af;">No impacts detected</p>';
-        document.getElementById('exportBtn').style.display = 'none';
         return;
       }
-
-      document.getElementById('exportBtn').style.display = 'block';
       
-      var recentImpacts = impacts.slice(0, 5);
+      const recentImpacts = impactHistory.slice(0, 5);
       
-      for (var i = 0; i < impactMarkers.length; i++) {
-        map.removeLayer(impactMarkers[i]);
-      }
-      impactMarkers = [];
-      
-      for (var i = 0; i < recentImpacts.length; i++) {
-        var impact = recentImpacts[i];
-        var date = new Date(impact.timestamp);
-        var timeStr = date.toLocaleTimeString();
+      recentImpacts.forEach(impact => {
+        const date = new Date(impact.timestamp);
+        const timeStr = date.toLocaleString();
         
-        var alertDiv = document.createElement('div');
+        const alertDiv = document.createElement('div');
         alertDiv.className = 'impact-alert';
         alertDiv.innerHTML = 
           '<div class="impact-alert-header">⚠️ Impact: ' + impact.magnitude.toFixed(2) + ' g</div>' +
           '<div class="impact-alert-details">' + timeStr + '</div>';
         
-        alertDiv.onclick = (function(lat, lng) {
-          return function() {
-            map.setView([lat, lng], 16);
-          };
-        })(impact.latitude, impact.longitude);
+        alertDiv.onclick = () => {
+          map.setView([impact.latitude, impact.longitude], 16);
+        };
         
         impactList.appendChild(alertDiv);
-
-        var impactIcon = L.divIcon({
-          html: '<div style="background: #ef4444; width: 24px; height: 24px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3), 0 2px 4px rgba(0,0,0,0.3); animation: pulse 2s infinite;"></div>',
-          className: '',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
-        });
-
-        var marker = L.marker([impact.latitude, impact.longitude], { icon: impactIcon })
-          .addTo(map)
-          .bindPopup(
-            '<strong style="color: #ef4444;">⚠️ Impact Detected</strong><br>' +
-            'Magnitude: ' + impact.magnitude.toFixed(2) + ' g<br>' +
-            'Time: ' + timeStr + '<br>' +
-            'Device: ' + impact.deviceId
-          );
-        
-        impactMarkers.push(marker);
-      }
+      });
     }
 
-    function findNearbyHospitals(lat, lng) {
-      var radius = 5000;
-      var query = '[out:json][timeout:25];(node["amenity"="hospital"](around:' + radius + ',' + lat + ',' + lng + ');way["amenity"="hospital"](around:' + radius + ',' + lat + ',' + lng + '););out center;';
-      
-      fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query))
-        .then(function(response) {
-          return response.json();
-        })
-        .then(function(data) {
-          var hospitals = [];
-          for (var i = 0; i < data.elements.length; i++) {
-            var element = data.elements[i];
-            var hospLat = element.lat || (element.center ? element.center.lat : null);
-            var hospLon = element.lon || (element.center ? element.center.lon : null);
-            
-            if (!hospLat || !hospLon) continue;
-            
-            var distance = calculateDistance(lat, lng, hospLat, hospLon);
-
-            hospitals.push({
-              id: element.id,
-              name: element.tags.name || 'Unnamed Hospital',
-              latitude: hospLat,
-              longitude: hospLon,
-              distance: distance,
-              address: element.tags['addr:full'] || element.tags['addr:street'] || 'Address not available'
-            });
-          }
-          
-          hospitals.sort(function(a, b) {
-            return a.distance - b.distance;
-          });
-          
-          nearbyHospitals = hospitals.slice(0, 5);
-          displayHospitals();
-        })
-        .catch(function(error) {
-          console.error('Error fetching hospitals:', error);
-        });
-    }
-
-    function displayHospitals() {
-      var hospitalList = document.getElementById('hospitalList');
-      hospitalList.innerHTML = '';
-
-      for (var i = 0; i < hospitalMarkers.length; i++) {
-        map.removeLayer(hospitalMarkers[i]);
-      }
-      hospitalMarkers = [];
-
-      for (var i = 0; i < nearbyHospitals.length; i++) {
-        var hospital = nearbyHospitals[i];
-        var card = document.createElement('div');
-        card.className = 'hospital-card';
-        if (selectedHospital && selectedHospital.id === hospital.id) {
-          card.className += ' selected';
-        }
-        card.innerHTML = '<div class="hospital-header"><span class="hospital-name">' + hospital.name + '</span><span class="hospital-distance">' + hospital.distance.toFixed(2) + ' km</span></div><p class="hospital-address">' + hospital.address + '</p>';
-        card.onclick = (function(h) {
-          return function() {
-            selectHospital(h);
-          };
-        })(hospital);
-        hospitalList.appendChild(card);
-
-        var hospitalIcon = L.divIcon({
-          html: '<div style="background: #ef4444; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
-          className: '',
-          iconSize: [16, 16],
-          iconAnchor: [8, 8]
-        });
-
-        var marker = L.marker([hospital.latitude, hospital.longitude], { icon: hospitalIcon })
-          .addTo(map)
-          .bindPopup('<strong>' + hospital.name + '</strong><br>' + hospital.distance.toFixed(2) + ' km away');
-        
-        hospitalMarkers.push(marker);
-      }
-    }
-
-    function selectHospital(hospital) {
-      selectedHospital = hospital;
-
-      var cards = document.querySelectorAll('.hospital-card');
-      for (var i = 0; i < cards.length; i++) {
-        cards[i].classList.remove('selected');
-      }
-      
-      for (var i = 0; i < nearbyHospitals.length; i++) {
-        if (nearbyHospitals[i].id === hospital.id) {
-          cards[i].classList.add('selected');
-          break;
-        }
-      }
-
-      if (!deviceMarker) return;
-      
-      var deviceLatLng = deviceMarker.getLatLng();
-      
-      fetch('https://router.project-osrm.org/route/v1/driving/' + deviceLatLng.lng + ',' + deviceLatLng.lat + ';' + hospital.longitude + ',' + hospital.latitude + '?overview=full&geometries=geojson')
-        .then(function(response) {
-          return response.json();
-        })
-        .then(function(data) {
-          if (data.routes && data.routes.length > 0) {
-            displayRoute(data.routes[0]);
-          }
-        })
-        .catch(function(error) {
-          console.error('Error fetching route:', error);
-        });
-    }
-
-    function displayRoute(route) {
-      if (routeLayer) {
-        map.removeLayer(routeLayer);
-      }
-
-      routeLayer = L.geoJSON(route.geometry, {
-        style: {
-          color: '#3b82f6',
-          weight: 4,
-          opacity: 0.7
-        }
-      }).addTo(map);
-
-      map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
-    }
-
-    function calculateDistance(lat1, lon1, lat2, lon2) {
-      var R = 6371;
-      var dLat = (lat2 - lat1) * Math.PI / 180;
-      var dLon = (lon2 - lon1) * Math.PI / 180;
-      var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-      var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return R * c;
-    }
-
-    document.getElementById('exportBtn').addEventListener('click', function() {
+    document.getElementById('exportBtn').addEventListener('click', () => {
       if (impactHistory.length === 0) {
         alert('No impact data to export');
         return;
       }
 
-      var csvContent = 'Timestamp,Device ID,Magnitude (g),X (g),Y (g),Z (g),Latitude,Longitude\n';
+      let csvContent = 'Timestamp,Magnitude (g),X (g),Y (g),Z (g),Latitude,Longitude\n';
       
-      for (var i = 0; i < impactHistory.length; i++) {
-        var impact = impactHistory[i];
-        var date = new Date(impact.timestamp);
-        var accel = impact.accelerometer || {};
+      impactHistory.forEach(impact => {
+        const date = new Date(impact.timestamp);
         csvContent += date.toISOString() + ',' +
-                      impact.deviceId + ',' +
-                      (impact.magnitude || 0).toFixed(3) + ',' +
-                      (accel.x || 0).toFixed(3) + ',' +
-                      (accel.y || 0).toFixed(3) + ',' +
-                      (accel.z || 0).toFixed(3) + ',' +
+                      impact.magnitude.toFixed(3) + ',' +
+                      impact.x.toFixed(3) + ',' +
+                      impact.y.toFixed(3) + ',' +
+                      impact.z.toFixed(3) + ',' +
                       impact.latitude.toFixed(6) + ',' +
                       impact.longitude.toFixed(6) + '\n';
-      }
+      });
 
-      var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      var link = document.createElement('a');
-      var url = URL.createObjectURL(blob);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
       link.setAttribute('download', 'impact_history_' + Date.now() + '.csv');
       link.style.visibility = 'hidden';
@@ -680,7 +627,135 @@
       document.body.removeChild(link);
     });
 
-    window.addEventListener('load', initMap);
+    function findNearbyHospitals() {
+      if (!deviceLocation) return;
+      
+      const radius = 5000;
+      const query = '[out:json][timeout:25];(node["amenity"="hospital"](around:' + radius + ',' + deviceLocation.latitude + ',' + deviceLocation.longitude + ');way["amenity"="hospital"](around:' + radius + ',' + deviceLocation.latitude + ',' + deviceLocation.longitude + '););out center;';
+      
+      fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query))
+        .then(response => {
+          if (!response.ok) throw new Error('Network error');
+          return response.json();
+        })
+        .then(data => {
+          const hospitals = [];
+          data.elements.forEach(element => {
+            const lat = element.lat || (element.center ? element.center.lat : null);
+            const lon = element.lon || (element.center ? element.center.lon : null);
+            
+            if (!lat || !lon) return;
+            
+            const distance = calculateDistance(deviceLocation.latitude, deviceLocation.longitude, lat, lon);
+
+            hospitals.push({
+              id: element.id,
+              name: element.tags.name || 'Unnamed Hospital',
+              latitude: lat,
+              longitude: lon,
+              distance: distance,
+              address: element.tags['addr:full'] || element.tags['addr:street'] || 'Address not available'
+            });
+          });
+          
+          hospitals.sort((a, b) => a.distance - b.distance);
+          nearbyHospitals = hospitals.slice(0, 5);
+          
+          if (nearbyHospitals.length > 0) {
+            displayHospitals();
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching hospitals:', error);
+        });
+    }
+
+    function displayHospitals() {
+      document.getElementById('hospitalSection').classList.remove('hidden');
+      const hospitalList = document.getElementById('hospitalList');
+      hospitalList.innerHTML = '';
+
+      nearbyHospitals.forEach(hospital => {
+        const card = document.createElement('div');
+        card.className = 'hospital-card';
+        if (selectedHospital && selectedHospital.id === hospital.id) {
+          card.className += ' selected';
+        }
+        card.innerHTML = '<div class="hospital-header"><span class="hospital-name">' + hospital.name + '</span><span class="hospital-distance">' + hospital.distance.toFixed(2) + ' km</span></div><p class="hospital-address">' + hospital.address + '</p>';
+        card.onclick = () => selectHospital(hospital);
+        hospitalList.appendChild(card);
+
+        const hospitalIcon = L.divIcon({
+          html: '<div style="background: #ef4444; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
+          className: '',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+
+        const marker = L.marker([hospital.latitude, hospital.longitude], { icon: hospitalIcon })
+          .addTo(map)
+          .bindPopup('<strong>' + hospital.name + '</strong><br>' + hospital.distance.toFixed(2) + ' km away');
+        
+        markers.push(marker);
+      });
+    }
+
+    function selectHospital(hospital) {
+      selectedHospital = hospital;
+
+      const cards = document.querySelectorAll('.hospital-card');
+      cards.forEach(card => card.classList.remove('selected'));
+      
+      const index = nearbyHospitals.findIndex(h => h.id === hospital.id);
+      if (index >= 0) {
+        cards[index].classList.add('selected');
+      }
+
+      fetch('https://router.project-osrm.org/route/v1/driving/' + deviceLocation.longitude + ',' + deviceLocation.latitude + ';' + hospital.longitude + ',' + hospital.latitude + '?overview=full&geometries=geojson')
+        .then(response => {
+          if (!response.ok) throw new Error('Route error');
+          return response.json();
+        })
+        .then(data => {
+          if (data.routes && data.routes.length > 0) {
+            displayRoute(data.routes[0], hospital);
+          }
+        })
+        .catch(error => {
+          console.error('Route error:', error);
+        });
+    }
+
+    function displayRoute(route, hospital) {
+      if (routeLayer) map.removeLayer(routeLayer);
+
+      routeLayer = L.geoJSON(route.geometry, {
+        style: { color: '#3b82f6', weight: 4, opacity: 0.7 }
+      }).addTo(map);
+
+      map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+
+      document.getElementById('routeCard').classList.remove('hidden');
+      document.getElementById('routeHospitalName').textContent = hospital.name;
+      document.getElementById('routeDistance').textContent = (route.distance / 1000).toFixed(2) + ' km';
+      document.getElementById('routeDuration').textContent = Math.round(route.duration / 60) + ' min';
+    }
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    window.addEventListener('load', () => {
+      initMap();
+      listenToFirebase();
+    });
   </script>
 </body>
 </html>
