@@ -88,6 +88,11 @@
       color: #92400e;
     }
 
+    .status-searching {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
     .status-disconnected {
       background: #f3f4f6;
       color: #374151;
@@ -115,6 +120,11 @@
     .info-card-orange {
       background: #fff7ed;
       border-left: 4px solid #f59e0b;
+    }
+
+    .info-card-yellow {
+      background: #fefce8;
+      border-left: 4px solid #eab308;
     }
 
     .impact-alert {
@@ -263,6 +273,18 @@
       margin-top: 8px;
     }
 
+    .debug-info {
+      background: #f3f4f6;
+      color: #374151;
+      padding: 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: monospace;
+      margin-top: 8px;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
     @keyframes pulse {
       0%, 100% {
         box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3), 0 2px 4px rgba(0,0,0,0.3);
@@ -270,6 +292,14 @@
       50% {
         box-shadow: 0 0 0 8px rgba(239, 68, 68, 0.1), 0 2px 4px rgba(0,0,0,0.3);
       }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .spinner {
+      animation: spin 1s linear infinite;
     }
 
     .export-btn {
@@ -312,7 +342,17 @@
           <span class="status-label">Device Status</span>
           <span id="statusBadge" class="status-badge status-connecting">connecting...</span>
         </div>
+        <div class="status-header">
+          <span class="status-label">GPS Status</span>
+          <span id="gpsStatusBadge" class="status-badge status-searching">
+            <svg class="icon spinner" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;" viewBox="0 0 24 24">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+            </svg>
+            searching...
+          </span>
+        </div>
         <div id="errorMessage" class="error-message hidden"></div>
+        <div id="debugInfo" class="debug-info hidden"></div>
       </div>
 
       <div id="locationCard" class="info-card info-card-blue">
@@ -402,6 +442,7 @@
     let nearbyHospitals = [];
     let selectedHospital = null;
     let impactHistory = [];
+    let debugMode = true; // Enable debug logging
 
     function initMap() {
       map = L.map('map').setView([14.5995, 120.9842], 13);
@@ -426,26 +467,50 @@
       document.getElementById('errorMessage').classList.add('hidden');
     }
 
+    function addDebugLog(message) {
+      if (!debugMode) return;
+      const debugDiv = document.getElementById('debugInfo');
+      debugDiv.classList.remove('hidden');
+      const timestamp = new Date().toLocaleTimeString();
+      debugDiv.innerHTML = `[${timestamp}] ${message}<br>` + debugDiv.innerHTML;
+    }
+
+    function updateGPSStatus(status) {
+      const gpsStatusBadge = document.getElementById('gpsStatusBadge');
+      
+      if (status === 'fixed') {
+        gpsStatusBadge.innerHTML = '✓ GPS Fixed';
+        gpsStatusBadge.className = 'status-badge status-connected';
+      } else if (status === 'searching') {
+        gpsStatusBadge.innerHTML = '<svg class="icon spinner" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg> Searching...';
+        gpsStatusBadge.className = 'status-badge status-searching';
+      } else {
+        gpsStatusBadge.textContent = '- No GPS';
+        gpsStatusBadge.className = 'status-badge status-disconnected';
+      }
+    }
+
     function listenToFirebase() {
       const deviceRef = ref(database, 'devices/DEVICE001');
+      
+      addDebugLog('Connecting to Firebase...');
       
       onValue(deviceRef, (snapshot) => {
         const data = snapshot.val();
         console.log('Firebase data received:', data);
+        addDebugLog('Data received: ' + JSON.stringify(data));
         
-        if (data && data.latitude && data.longitude) {
+        if (data) {
           hideError();
           const statusBadge = document.getElementById('statusBadge');
           statusBadge.textContent = 'connected';
           statusBadge.className = 'status-badge status-connected';
 
-          deviceLocation = {
-            latitude: data.latitude,
-            longitude: data.longitude,
-            accuracy: data.accuracy || 15,
-            speed: data.speed || 0
-          };
+          // Check GPS status
+          const gpsStatus = data.gpsStatus || 'unknown';
+          updateGPSStatus(gpsStatus);
 
+          // Update accelerometer data
           if (data.accelerometer) {
             document.getElementById('accelX').textContent = 'X: ' + data.accelerometer.x.toFixed(2) + ' g';
             document.getElementById('accelY').textContent = 'Y: ' + data.accelerometer.y.toFixed(2) + ' g';
@@ -453,18 +518,45 @@
             document.getElementById('accelMagnitude').textContent = 'Impact: ' + data.accelerometer.magnitude.toFixed(2) + ' g';
           }
 
-          updateLocationDisplay();
-          updateMap();
-          
-          if (nearbyHospitals.length === 0) {
-            findNearbyHospitals();
+          // Only process location if we have valid coordinates
+          if (data.latitude !== undefined && data.longitude !== undefined) {
+            // Check if GPS has a real fix (not 0,0)
+            if (data.latitude !== 0 && data.longitude !== 0) {
+              deviceLocation = {
+                latitude: data.latitude,
+                longitude: data.longitude,
+                accuracy: data.accuracy || 15,
+                speed: data.speed || 0
+              };
+
+              addDebugLog(`GPS Fix: ${data.latitude}, ${data.longitude}`);
+              updateLocationDisplay();
+              updateMap();
+              
+              if (nearbyHospitals.length === 0) {
+                findNearbyHospitals();
+              }
+            } else {
+              // GPS is searching (0,0 coordinates)
+              document.getElementById('latitude').textContent = 'Lat: Waiting for GPS...';
+              document.getElementById('longitude').textContent = 'Lng: Waiting for GPS...';
+              document.getElementById('accuracy').textContent = 'GPS acquiring satellite fix...';
+              addDebugLog('GPS still searching for satellites');
+            }
           }
+          
+          // Update last update time
+          const now = new Date();
+          document.getElementById('lastUpdate').textContent = 'Last update: ' + now.toLocaleTimeString();
+          
         } else {
-          showError('Waiting for device data... Make sure ESP32 is sending data.');
+          showError('No data from device. Check ESP32 Serial Monitor for errors.');
+          addDebugLog('No data in Firebase path');
         }
       }, (error) => {
         console.error('Firebase error:', error);
         showError('Firebase connection error: ' + error.message);
+        addDebugLog('Firebase error: ' + error.message);
       });
 
       const impactsRef = query(ref(database, 'impacts'), limitToLast(10));
@@ -500,9 +592,6 @@
       document.getElementById('longitude').textContent = 'Lng: ' + deviceLocation.longitude.toFixed(6);
       document.getElementById('accuracy').textContent = 'Accuracy: ±' + deviceLocation.accuracy.toFixed(1) + 'm';
       document.getElementById('speed').textContent = 'Speed: ' + deviceLocation.speed.toFixed(1) + ' km/h';
-      
-      const now = new Date();
-      document.getElementById('lastUpdate').textContent = 'Last update: ' + now.toLocaleTimeString();
     }
 
     function updateMap() {
@@ -541,7 +630,9 @@
       impactMarkers = [];
 
       impactHistory.forEach(impact => {
-        addImpactMarker(impact);
+        if (impact.latitude !== 0 && impact.longitude !== 0) {
+          addImpactMarker(impact);
+        }
       });
     }
 
@@ -590,7 +681,9 @@
           '<div class="impact-alert-details">' + timeStr + '</div>';
         
         alertDiv.onclick = () => {
-          map.setView([impact.latitude, impact.longitude], 16);
+          if (impact.latitude !== 0 && impact.longitude !== 0) {
+            map.setView([impact.latitude, impact.longitude], 16);
+          }
         };
         
         impactList.appendChild(alertDiv);
